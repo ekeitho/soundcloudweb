@@ -1,0 +1,74 @@
+    .demo-card-square.mdl-card {
+        height: 320px;
+        width: 320px;
+        margin: 10px auto;
+    }
+
+@media only screen and (max-width: 479px) {
+   .demo-card-square.mdl-card {
+        height: 160px;
+        width: 160px;
+        margin: 10px auto;
+    } 
+}
+    
+    .demo-card-square> .mdl-card__title {
+        color: #fff;
+    }
+    
+    body {
+        width: 100%;
+        height: 100%;
+        margin: 0 auto;
+        background-size: cover;
+        background-image: url('http://static.simpledesktops.com/uploads/desktops/2013/07/26/sunset_wide.png');
+    }
+
+    form {
+        width: 100%;
+    }
+    
+    .mdl-textfield__label:after {
+        background: white;
+    }
+
+    #mdl-input {
+        color: #424242;
+        text-align: center;
+    }
+    
+    #sound-grid {
+    }
+    
+    
+    #input-grid {
+        max-width: 600px;
+        width: 70%;
+        margin: 0 auto;
+    }
+    
+    form {
+        margin: 0 auto;
+    }
+    
+    .mdl-textfield__label.center {
+        text-align: center;
+    }
+    
+    #cast-button {
+        position: absolute;
+        top: 0;
+        right: 0;
+        transform: translate(28px, 20px)
+    }
+    
+    .demo-layout-transparent {
+        background: url('../assets/demos/transparent.jpg') center / cover;
+    }
+    
+    .demo-layout-transparent .mdl-layout__header,
+    .demo-layout-transparent .mdl-layout__drawer-button {
+        /* This background is dark, so we set text to white. Use 87% black instead if
+         your background is light. */
+        color: white;
+    }

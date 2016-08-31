@@ -20,10 +20,8 @@
         <div id="mdl-layout__drawer" class="mdl-layout__drawer">
             <span class="mdl-layout-title">Soundcloud Caster</span>
             <nav class="mdl-navigation">
-                <a id="past-casted" class="mdl-navigation__link" href="#">Past Casted</a>
+                <a id="past-casted" class="mdl-navigation__link" href="#">Cache / Cast Soundcloud URL</a>
                 <a id="search-by-user" class="mdl-navigation__link" href="#">Search By User</a>
-                <a id="search-by-track" class="mdl-navigation__link" href="#">Search By Track</a>
-                <a id="cast-with-url" class="mdl-navigation__link" href="#">Cast With URL</a>
             </nav>
         </div>
         
@@ -80,44 +78,55 @@
 
     function onInitSuccess() {
         success = true;
-        console.log("init success");
     }
 
     function onError(e) {
-
+        success = false;
     }
 
     // only reports when cast devices are available
     // not WHICH are available
     function receiverListener(e) {
         if (e === chrome.cast.ReceiverAvailability.AVAILABLE) {
-            console.log("available");
+            success = true;
         } else if (e === chrome.cast.ReceiverAvailability.UNAVAILABLE) {
-
+            success = false;
+        }
+    }
+    
+    // e is the session
+    function sessionListener(e) {
+        session = e;
+        console.log("session listener start");
+        if (session.media.length != 0) {
+            console.log('media discovered');
+            onMediaDiscovered('onRequestSessionSuccess', session.media[0]);
         }
     }
 
     function onRequestSessionSuccess(e) {
         // has a receiver which can display friendly name of itsself
         session = e;
-        track = globalTrack;
+        var track = globalTrack;
+        
+        var buildMediaInfo = function(actualURL) {
+            var mediaInfo = new chrome.cast.media.MediaInfo(actualURL);
+            mediaInfo.duration = track['duration'];
+            mediaInfo.streamType = chrome.cast.media.StreamType.BUFFERED;
+            mediaInfo.metadata = new chrome.cast.media.MusicTrackMediaMetadata();
+            mediaInfo.metadata.songName = track['title'];
+            mediaInfo.metadata.artist = track['user']['username'];
+            mediaInfo.metadata.images = [new chrome.cast.Image(track['artwork_url'].replace('large.jpg', 't500x500.jpg'))];
+            return mediaInfo;
+        }
         
         $.ajax({
             type: "GET",
             url: track['stream_url'] + "s?client_id=" + 'ac4e5f2b0425fbbfa63f5626d3c2aaf8',
             success: function(data) {
-                var actualURL = data['http_mp3_128_url'];
                 // connection to receiver doesnt occur until sender issues first message
-                var mediaInfo = new chrome.cast.media.MediaInfo(actualURL);
-                mediaInfo.duration = track['duration'];
-                mediaInfo.streamType = chrome.cast.media.StreamType.BUFFERED;
-                mediaInfo.metadata = new chrome.cast.media.MusicTrackMediaMetadata();
-                mediaInfo.metadata.songName = track['title'];
-                mediaInfo.metadata.artist = track['user']['username'];
-                mediaInfo.metadata.images = [new chrome.cast.Image(track['artwork_url'].replace('large.jpg', 't500x500.jpg'))];
-                var request = new chrome.cast.media.LoadRequest(mediaInfo);
+                var request = new chrome.cast.media.LoadRequest(buildMediaInfo(data['http_mp3_128_url']));
                 session.loadMedia(request, onMediaDiscovered.bind(this, 'loadMedia'), onMediaError);
-
                 globalTrack = null;
             }
         });
@@ -141,33 +150,12 @@
     function onMediaStatusUpdate(e) {
         console.log("on media update");
     }
-
-    // e is the session
-    function sessionListener(e) {
-        session = e;
-        console.log("session listener start");
-        if (session.media.length != 0) {
-            console.log('media discovered');
-            onMediaDiscovered('onRequestSessionSuccess', session.media[0]);
-        }
-    }
-
-    function fetchArtistSongs(artistUsername) {
-        SC.get('users/' + artistUsername, {
-            limit: 1
-        }).then(function(user) {
-            return SC.get('users/' + user.id + "/tracks");
-        }, onApiError).then(function(tracks) {
-            tracks.forEach(function(track) {
-                addToGrid(artistUsername, track, "Cast");
-            }, onApiError);
-            console.log("hi");
-        });
-    }
     
     $(document).ready(function() {
         setUpNavOnClicks();
         setUpFabOnClick();
+        // if any, set it up
+        setUpGridFromLocalStorage();
 
         window['__onGCastApiAvailable'] = function(loaded, errorInfo) {
             if (loaded) {
@@ -181,11 +169,42 @@
     SC.initialize({
         client_id: 'ac4e5f2b0425fbbfa63f5626d3c2aaf8'
     });
-
+    
+    function fetchArtistSongs(artistUsername) {
+        SC.get('users/' + artistUsername, {
+            limit: 1}).
+        then(function(user) {
+            return SC.get('users/' + user.id + "/tracks");}, 
+             onApiError).
+        then(function(tracks) {
+            tracks.forEach(function(track) {
+                addToGrid(track, "Cast", "append");
+            }, onApiError);
+        });
+    }
+    
+    function fetchByLink(URL) {
+        var urlSplit = URL.split("/");
+        SC.get('users/' + urlSplit[urlSplit.length - 2], {
+            limit: 1}).
+        then(function(user) {
+            return SC.get('users/' + user.id + "/tracks");}, 
+             onApiError).
+        then(function(tracks) {
+            tracks.forEach(function(track) {
+                if (track['permalink'] === urlSplit[urlSplit.length - 1]) {
+                    sendRequestToChromecast(SENT_URL_CAST_LINK, track, onCastError);
+                }
+            }, onApiError);
+        });
+    }
+    
+    var SENT_URL_CAST_LINK = 1;
+    var CARD_SEARCH_CAST_LINK = 2;
+    var CACHED_CAST_LINK = 3;
+    
     var PAST_CASTED = 1;
     var SEARCH_BY_USER = 2;
-    var SEARCH_BY_TRACK = 3;
-    var CAST_WITH_URL = 4;
     var STATE = PAST_CASTED;
     var ENTER = 13;
     
@@ -205,20 +224,15 @@
     function runFabLogic() {
         var fab = document.getElementById('cast-button');
         var input = document.getElementById('mdl-input');
-        resetGrid();
-
+        
         switch(STATE) {
-            case SEARCH_BY_TRACK:
-                break;
             case SEARCH_BY_USER:
                 fetchArtistSongs(input.value);
-                break;
-            case CAST_WITH_URL:
+                resetGrid();
                 break;
             case PAST_CASTED:
-                break;
-            default:
-                console.log("should never get here");
+                fetchByLink(input.value);
+                // dont want to reset but add to the screen
                 break;
         }
         input.value = "";
@@ -226,15 +240,38 @@
         input.parentElement.classList.remove('is-dirty');
     }
     
+    function onCastError() {
+        var errorMessage = function() {
+            if (success) {
+                return "Chromecast had an error with playback";
+            }
+            return "Chromecast is not connected";
+        }
+        var snackbarContainer = document.querySelector('#demo-snackbar-example');
+        var data = {
+          message: errorMessage(),
+          timeout: 3500
+        };
+        snackbarContainer.MaterialSnackbar.showSnackbar(data);
+    }
+    
+    function onDuplicateCache() {
+        var errorMessage = function() {
+            return "Already have song in cache"
+        }
+        var snackbarContainer = document.querySelector('#demo-snackbar-example');
+        var data = {
+          message: errorMessage(),
+          timeout: 3500
+        };
+        snackbarContainer.MaterialSnackbar.showSnackbar(data);
+    }
+    
     function onApiError() {
         var errorMessage = function() {
             switch(STATE) {
-                case SEARCH_BY_TRACK:
-                    return "No track can be found";
                 case SEARCH_BY_USER:
                     return "No user can be found";
-                case CAST_WITH_URL:
-                    return "Can not cast URL";
                 case PAST_CASTED:
                     return "Can not cast URL";
             }
@@ -261,58 +298,110 @@
         }
     }
     
-    function setUpNavOnClicks() {
-        var label = document.getElementById('mdl-label');
-        var drawer = document.getElementById('mdl-layout__drawer');
-        var fabButton = document.getElementById('mdl-icon');
-        var input = document.getElementById('mdl-input');
-        
+    function setUpGridFromLocalStorage() {
+        if (localStorage && localStorage['track_list']) {
+            var array = JSON.parse(localStorage['track_list']);
+            for (var i = 0; i < array.length; i++) {
+                addToGrid(array[i], "Cast Again", "append");
+            }
+        }
+    }
+    
+    function setUpNavOnClicks() { 
+        // clears the grid if click on different state
         var resetStateIfNecessary = function(state) {
+            var input = document.getElementById('mdl-input');  
             // if choose same state, don't reset input
             if (STATE !== state) {
                 input.value = "";
                 STATE = state;
                 resetGrid();
+                
+                // there is a change in state...
+                if (STATE == PAST_CASTED) {
+                    setUpGridFromLocalStorage();
+                }
             } 
-        }
+        };
         
-        document.getElementById('past-casted').onclick = function() {
-            resetStateIfNecessary(PAST_CASTED);
-            label.textContent = "Enter your soundcloud link: ";
+        //based on click on the nav do some changes
+        var triggerOnClick = function(state, labelText, fabIconText) {
+            var label = document.getElementById('mdl-label');
+            var drawer = document.getElementById('mdl-layout__drawer');
+            var fabButton = document.getElementById('mdl-icon');
+            
+            resetStateIfNecessary(state);
+            label.textContent = labelText;
             drawer.classList.toggle('is-visible');
             // have to do this for each obfuscator because only on a click from the nav
             // then the obfuscator is attainable
             document.getElementsByClassName('mdl-layout__obfuscator')[0].classList.toggle('is-visible');
-            fabButton.textContent = "cast";
+            fabButton.textContent = fabIconText;
+        };
+        
+        document.getElementById('past-casted').onclick = function() {
+            triggerOnClick(PAST_CASTED, "Enter your soundcloud link: ", "cast");
         };
         
         document.getElementById('search-by-user').onclick = function() {
-            console.log('user searched');
-            resetStateIfNecessary(SEARCH_BY_USER);
-            label.textContent = "Search by soundcloud user";
-            drawer.classList.toggle('is-visible');
-            document.getElementsByClassName('mdl-layout__obfuscator')[0].classList.toggle('is-visible');
-            fabButton.textContent = "search";
-        };
-        
-        document.getElementById('search-by-track').onclick = function() {
-            resetStateIfNecessary(SEARCH_BY_TRACK);
-            label.textContent = "Search by soundcloud track";
-            drawer.classList.toggle('is-visible');
-            document.getElementsByClassName('mdl-layout__obfuscator')[0].classList.toggle('is-visible');
-            fabButton.textContent = "search";
-        };
-        
-        document.getElementById('cast-with-url').onclick = function() {
-            resetStateIfNecessary(CAST_WITH_URL);
-            label.textContent = "Enter your soundcloud link: ";
-            drawer.classList.toggle('is-visible');
-            document.getElementsByClassName('mdl-layout__obfuscator')[0].classList.toggle('is-visible');
-            fabButton.textContent = "cast";
+            triggerOnClick(SEARCH_BY_USER, "Search by Soundcloud Username: ", "search");
         };
     }
     
-    function addToGrid(artist, track, actionText) {
+    function sendRequestToChromecast(where, track, errorFunc) {
+        globalTrack = track;
+        var grid = document.getElementById("sound-grid");
+        
+
+        // if on the cache page and user clicks on a card action
+        // do not add to local storage because PAST CAST page is using it
+        if (localStorage && where != CACHED_CAST_LINK) {
+            //artwork_url, title, duration, user[username], streamurl
+            var newObj = {id: track['id'],
+                          artwork_url: track['artwork_url'],
+                          title: track['title'],
+                          duration: track['duration'],
+                          user: {username : track['user']['username']},
+                          stream_url: track['stream_url']};
+            
+            // if no storage list yet
+            if (!localStorage['track_list']) {
+                localStorage['track_list'] = JSON.stringify([newObj]);
+                // meaning on the cache state but using the cast link action
+                if(where == SENT_URL_CAST_LINK) {
+                    addToGrid(track, "Cast Again", "prepend");
+                }
+            } 
+            // or there is storage so add to it if no duplicate
+            else {
+                var arrayOfTracks = JSON.parse(localStorage['track_list']);
+                var addToArray = true;
+                for (var i = 0; i < arrayOfTracks.length; i++) {
+                    if (arrayOfTracks[i]['id'] == track['id']) {
+                        addToArray = false;
+                        onDuplicateCache();
+                        break;
+                    }
+                }
+                // if no duplicates then add to beginning of the array 
+                // and overwrite localstorage data with new one
+                if (addToArray) {
+                    
+                    // meaning on the cache state but using the cast link action
+                    if(where == SENT_URL_CAST_LINK) {
+                        addToGrid(track, "Cast Again", "prepend");
+                    }
+                    
+                    arrayOfTracks.unshift(newObj);
+                    localStorage['track_list'] = JSON.stringify(arrayOfTracks);
+                }
+            }
+        }
+        chrome.cast.requestSession(onRequestSessionSuccess, errorFunc);
+    }
+    
+    // direction - way to append to the grid (string)
+    function addToGrid(track, actionText, direction) {
         var card = document.createElement('div');
         card.className = "mdl-cell mdl-cell--3-col demo-card-square mdl-card mdl-shadow--2dp";
 
@@ -321,10 +410,11 @@
         cardTitle.style.backgroundColor = '#f69168';
         cardTitle.style.backgroundRepeat = 'no-repeat';
         cardTitle.style.backgroundSize = 'cover';
-        cardTitle.style.backgroundImage = "url(" + track['artwork_url'].replace('large.jpg', 't500x500.jpg') + ")";
+        cardTitle.style.backgroundImage = (track['artwork_url']) ? "url(" + track['artwork_url'].replace('large.jpg', 't500x500.jpg') + ")" : "";
+        
         var cardTitleText = document.createElement('h2');
         cardTitleText.className = "mdl-card__title-text";
-        cardTitleText.textContent = artist;
+        cardTitleText.textContent = track['user']['username'];
         cardTitle.appendChild(cardTitleText);
 
         var supportText = document.createElement('div');
@@ -334,8 +424,11 @@
         var cardAction = document.createElement('div');
         cardAction.className = "mdl-card__actions mdl-card--border";
         cardAction.onclick = function() {
-            globalTrack = track;
-            chrome.cast.requestSession(onRequestSessionSuccess, function() { console.log("error") });
+            if (STATE === PAST_CASTED) {
+                sendRequestToChromecast(CACHED_CAST_LINK, track, function() { console.log("error") });
+            } else if (STATE == SEARCH_BY_USER) {
+                sendRequestToChromecast(CARD_SEARCH_CAST_LINK, track, function() { console.log("error") });
+            }
         }
         
         var cardActionText = document.createElement('div');
@@ -349,7 +442,16 @@
         card.appendChild(cardAction);
 
         componentHandler.upgradeElement(card);
-        document.getElementById("sound-grid").appendChild(card);
+        var grid = document.getElementById("sound-grid");
+        if (direction == "append") {
+            grid.appendChild(card);   
+        } else {
+            if (grid.firstChild) {
+                grid.insertBefore(card, grid.firstChild);
+            } else {
+                grid.appendChild(card);
+            }
+        }
     }
 </script>
 <script type="text/javascript" src="https://www.gstatic.com/cv/js/sender/v1/cast_sender.js">

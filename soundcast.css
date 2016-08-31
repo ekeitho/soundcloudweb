@@ -4,13 +4,13 @@
         margin: 10px auto;
     }
 
-@media only screen and (max-width: 479px) {
-   .demo-card-square.mdl-card {
-        height: 160px;
-        width: 160px;
-        margin: 10px auto;
-    } 
-}
+    @media only screen and (max-width: 479px) {
+       .demo-card-square.mdl-card {
+            height: 160px;
+            width: 160px;
+            margin: 10px auto;
+        } 
+    }
     
     .demo-card-square> .mdl-card__title {
         color: #fff;
@@ -60,10 +60,6 @@
         top: 0;
         right: 0;
         transform: translate(28px, 20px)
-    }
-    
-    .demo-layout-transparent {
-        background: url('../assets/demos/transparent.jpg') center / cover;
     }
     
     .demo-layout-transparent .mdl-layout__header,

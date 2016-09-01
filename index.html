@@ -48,11 +48,9 @@
                 </div>
             </div>
 
-            <div>
             <!-- where api get items are appeneded to -->
             <div id="sound-grid" class="mdl-grid">
             </div>
-                </div>
         </main>
         
         
@@ -407,9 +405,6 @@
 
         var cardTitle = document.createElement('div');
         cardTitle.className = "mdl-card__title mdl-card--expand";
-        cardTitle.style.backgroundColor = '#f69168';
-        cardTitle.style.backgroundRepeat = 'no-repeat';
-        cardTitle.style.backgroundSize = 'cover';
         cardTitle.style.backgroundImage = (track['artwork_url']) ? "url(" + track['artwork_url'].replace('large.jpg', 't500x500.jpg') + ")" : "";
         
         var cardTitleText = document.createElement('h2');

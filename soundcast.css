@@ -15,6 +15,12 @@
     .demo-card-square> .mdl-card__title {
         color: #fff;
     }
+
+    .mdl-card__title {
+        background-color: #f69168;
+        background-repeat: 'no-repeat';
+        background-size: 'cover';
+    }
     
     body {
         width: 100%;
